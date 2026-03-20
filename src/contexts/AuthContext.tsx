@@ -59,7 +59,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             return;
           }
-          throw new Error('Not opened from Telegram');
+          // Debug info for troubleshooting
+          const debugInfo = [
+            `TG obj: ${!!window.Telegram}`,
+            `WebApp: ${!!window.Telegram?.WebApp}`,
+            `initData len: ${window.Telegram?.WebApp?.initData?.length ?? 'N/A'}`,
+            `hash: ${window.location.hash.slice(0, 50)}`,
+          ].join(', ');
+          throw new Error(`Not opened from Telegram (${debugInfo})`);
         }
 
         const { token, user } = await authenticate(initDataRaw);
