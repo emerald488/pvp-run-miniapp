@@ -28,9 +28,10 @@ export function buildHexGeoJSON(
   const features: GeoJSON.Feature<GeoJSON.Polygon, HexFeatureProperties>[] = [];
 
   for (const h3Index of hexIndexes) {
-    const boundary = cellToBoundary(h3Index, true); // true = [lng, lat] format
-    // Close the polygon
-    const coords = [...boundary, boundary[0]];
+    const boundary = cellToBoundary(h3Index);
+    // Convert [lat, lng] to [lng, lat] for GeoJSON
+    const coords = boundary.map(([lat, lng]) => [lng, lat] as [number, number]);
+    coords.push(coords[0]);
 
     const zone = ownership.get(h3Index);
 
