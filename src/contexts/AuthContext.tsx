@@ -1,13 +1,40 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { retrieveLaunchParams } from '@telegram-apps/sdk-react';
 import { authenticate } from '../lib/auth';
 import type { AuthState } from '../types/auth';
+
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        initData?: string;
+        initDataUnsafe?: Record<string, unknown>;
+      };
+    };
+  }
+}
 
 interface AuthContextValue extends AuthState {
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function getInitDataRaw(): string | null {
+  // window.Telegram.WebApp.initData — injected by telegram-web-app.js
+  const tgInitData = window.Telegram?.WebApp?.initData;
+  if (tgInitData) return tgInitData;
+
+  // Fallback: parse from URL hash/search
+  const hash = window.location.hash.slice(1);
+  const search = window.location.search.slice(1);
+  for (const raw of [hash, search]) {
+    const params = new URLSearchParams(raw);
+    const tgWebAppData = params.get('tgWebAppData');
+    if (tgWebAppData) return tgWebAppData;
+  }
+
+  return null;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -20,8 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function doAuth() {
       try {
-        const launchParams = retrieveLaunchParams();
-        const initDataRaw = launchParams.initDataRaw as string | undefined;
+        const initDataRaw = getInitDataRaw();
 
         if (!initDataRaw) {
           if (import.meta.env.DEV) {
@@ -33,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             return;
           }
-          throw new Error('No Telegram initData available');
+          throw new Error('Not opened from Telegram');
         }
 
         const { token, user } = await authenticate(initDataRaw);
