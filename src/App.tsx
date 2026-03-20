@@ -1,11 +1,11 @@
-import { Map } from './components/Map';
+import { GameMap } from './components/Map';
 import { useLocation } from './hooks/useLocation';
 import { useTelegram } from './hooks/useTelegram';
 import { useAuth } from './contexts/AuthContext';
 
 function App() {
   const { isReady } = useTelegram();
-  const { isLoading: authLoading, error: authError } = useAuth();
+  const { isLoading: authLoading, error: authError, token, user } = useAuth();
   const location = useLocation();
 
   if (authError) {
@@ -41,7 +41,7 @@ function App() {
     );
   }
 
-  return <Map coordinates={location.coordinates} />;
+  return <GameMap coordinates={location.coordinates} token={token} userId={user?.id} />;
 }
 
 export default App;
