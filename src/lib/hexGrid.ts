@@ -62,7 +62,9 @@ export function buildHexGeoJSON(
     const serverOwner = serverZones.get(h3Index);
     const isLocal = localHexes.has(h3Index);
     const owned = !!serverOwner || isLocal;
-    const color = serverOwner ? serverOwner.ownerColor : isLocal ? localColor : '#333344';
+    const neutralColor = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches
+      ? '#dde0e6' : '#333344';
+    const color = serverOwner ? serverOwner.ownerColor : isLocal ? localColor : neutralColor;
 
     features.push({
       type: 'Feature',

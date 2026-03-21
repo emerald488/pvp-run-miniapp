@@ -34,9 +34,14 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const mapStyle = isDark
+      ? 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
+      : 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+      style: mapStyle,
       center: coordinates
         ? [coordinates.longitude, coordinates.latitude]
         : [37.6173, 55.7558],
@@ -88,7 +93,7 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
         type: 'line',
         source: HEX_SOURCE,
         paint: {
-          'line-color': 'rgba(255,255,255,0.2)',
+          'line-color': isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
           'line-width': 0.5,
         },
       });
