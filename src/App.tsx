@@ -8,6 +8,7 @@ import { useTelegram } from './hooks/useTelegram';
 import { useAuth } from './contexts/AuthContext';
 import { useRun } from './hooks/useRun';
 import { trackToHexes, polygonToHexes, type ZoneOwner } from './lib/hexGrid';
+import { supabase } from './lib/supabase';
 import type { OtherPlayer } from './components/Map';
 
 function App() {
@@ -19,20 +20,23 @@ function App() {
   const [serverZones, setServerZones] = useState(new globalThis.Map<string, ZoneOwner>());
   const [otherPlayers, setOtherPlayers] = useState<OtherPlayer[]>([]);
 
-  // Fetch all captured zones from server
+  // Initial load of zones
   const loadZones = useCallback(async () => {
     try {
-      const res = await fetch('/api/zones');
-      const data = await res.json();
+      const { data } = await supabase
+        .from('zones')
+        .select('h3_index, owner_id, owner_color')
+        .not('owner_id', 'is', null);
+
       const map = new globalThis.Map<string, ZoneOwner>();
-      for (const z of data.zones || []) {
+      for (const z of data || []) {
         map.set(z.h3_index, { ownerId: z.owner_id, ownerColor: z.owner_color });
       }
       setServerZones(map);
     } catch { /* ignore */ }
   }, []);
 
-  // Fetch active players
+  // Fetch active players (still polling — small load)
   const loadPlayers = useCallback(async () => {
     try {
       const res = await fetch('/api/players');
@@ -41,12 +45,44 @@ function App() {
     } catch { /* ignore */ }
   }, []);
 
-  // Load zones + players on mount and periodically
+  // Load zones on mount + subscribe to realtime changes
   useEffect(() => {
     loadZones();
     loadPlayers();
-    const interval = setInterval(() => { loadZones(); loadPlayers(); }, 15000);
-    return () => clearInterval(interval);
+
+    // Supabase Realtime subscription for zones
+    const channel = supabase
+      .channel('zones-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'zones' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const z = payload.new as { h3_index: string; owner_id: string; owner_color: string };
+            setServerZones((prev) => {
+              const next = new globalThis.Map(prev);
+              next.set(z.h3_index, { ownerId: z.owner_id, ownerColor: z.owner_color });
+              return next;
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const z = payload.old as { h3_index: string };
+            setServerZones((prev) => {
+              const next = new globalThis.Map(prev);
+              next.delete(z.h3_index);
+              return next;
+            });
+          }
+        },
+      )
+      .subscribe();
+
+    // Players polling at 30s (lightweight)
+    const playersInterval = setInterval(loadPlayers, 30000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(playersInterval);
+    };
   }, [loadZones, loadPlayers]);
 
   // Reload zones when run stops
