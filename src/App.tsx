@@ -142,41 +142,45 @@ function App() {
     );
   }
 
-  if (screen === 'profile' && user && token) {
-    return <Profile user={user} token={token} onClose={() => setScreen('map')} />;
-  }
-
-  if (screen === 'leaderboard') {
-    return <Leaderboard onClose={() => setScreen('map')} />;
-  }
-
   const trackCoords = run.points.map((p) => p.coordinates);
+  const showMap = screen === 'map';
 
   return (
     <>
-      <GameMap
-        coordinates={location.coordinates}
-        trackPoints={trackCoords}
-        ownedHexes={localHexes}
-        serverZones={serverZones}
-        otherPlayers={otherPlayers}
-      />
-      <div className="top-buttons">
-        <button className="top-btn" onClick={() => setScreen('leaderboard')}>🏆</button>
-        <button className="top-btn" onClick={() => setScreen('profile')}>
-          {user?.first_name?.[0] || '?'}
-        </button>
+      {/* Map always mounted, hidden via CSS when other screens active */}
+      <div style={{ display: showMap ? 'block' : 'none', width: '100%', height: '100%' }}>
+        <GameMap
+          coordinates={location.coordinates}
+          trackPoints={trackCoords}
+          ownedHexes={localHexes}
+          serverZones={serverZones}
+          otherPlayers={otherPlayers}
+        />
+        <div className="top-buttons">
+          <button className="top-btn" onClick={() => setScreen('leaderboard')}>🏆</button>
+          <button className="top-btn" onClick={() => setScreen('profile')}>
+            {user?.first_name?.[0] || '?'}
+          </button>
+        </div>
+        <RunPanel
+          isRunning={run.isRunning}
+          distance={run.distance}
+          duration={run.duration}
+          speed={run.speed}
+          hasTerritory={!!run.territory}
+          liveTracking={run.liveTracking}
+          onStart={run.start}
+          onStop={run.stop}
+        />
       </div>
-      <RunPanel
-        isRunning={run.isRunning}
-        distance={run.distance}
-        duration={run.duration}
-        speed={run.speed}
-        hasTerritory={!!run.territory}
-        liveTracking={run.liveTracking}
-        onStart={run.start}
-        onStop={run.stop}
-      />
+
+      {screen === 'profile' && user && token && (
+        <Profile user={user} token={token} onClose={() => setScreen('map')} />
+      )}
+
+      {screen === 'leaderboard' && (
+        <Leaderboard onClose={() => setScreen('map')} />
+      )}
     </>
   );
 }
