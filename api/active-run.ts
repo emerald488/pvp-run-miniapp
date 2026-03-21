@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: telegramId,
-        text: '🏃 Забег начат!\n\nДля фонового трекинга:\n1. Нажмите 📎 внизу\n2. Location → Share Live Location\n3. Выберите время (1 час)\n\nТрек будет записываться даже при свёрнутом приложении.',
+        text: '🏃 Забег начат!\n\nДля фонового трекинга:\n1. Нажмите 📎 (скрепка) внизу\n2. Геопозиция → Трансляция геопозиции\n3. Выберите «8 часов» или «Пока не отключу»\n\nТрек и захват территории будут работать даже при свёрнутом приложении.',
       }),
     }).catch(() => {});
 
