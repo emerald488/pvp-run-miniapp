@@ -199,6 +199,62 @@ export function useRun(token: string | null) {
     });
   }, []);
 
+  // Restore active run on mount
+  useEffect(() => {
+    if (!token) return;
+
+    async function restore() {
+      try {
+        const res = await fetch('/api/active-run', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!data.active) return;
+
+        // Active run found — restore state
+        startTimeRef.current = new Date(data.startedAt).getTime();
+
+        const points: RunPoint[] = (data.points || []).map((p: { latitude: number; longitude: number; timestamp: string }) => ({
+          coordinates: { latitude: p.latitude, longitude: p.longitude },
+          timestamp: new Date(p.timestamp).getTime(),
+        }));
+
+        let distance = 0;
+        for (let i = 1; i < points.length; i++) {
+          distance += haversine(points[i - 1].coordinates, points[i].coordinates);
+        }
+
+        const elapsed = (Date.now() - startTimeRef.current) / 1000;
+        const speed = elapsed > 0 ? (distance / 1000) / (elapsed / 3600) : 0;
+        const lastPoint = points.length > 0 ? points[points.length - 1].timestamp : 0;
+        const isLive = Date.now() - lastPoint < 30000;
+
+        setState({
+          isRunning: true,
+          points,
+          distance,
+          duration: elapsed,
+          speed,
+          territory: null,
+          liveTracking: isLive,
+          serverPointCount: points.length,
+        });
+
+        // Start timers
+        timerRef.current = setInterval(() => {
+          const e = (Date.now() - startTimeRef.current) / 1000;
+          setState((prev) => ({ ...prev, duration: e }));
+        }, 1000);
+
+        pollRef.current = setInterval(pollTrack, POLL_INTERVAL_MS);
+      } catch {
+        // No active run
+      }
+    }
+
+    restore();
+  }, [token]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
