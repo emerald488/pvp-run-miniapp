@@ -66,11 +66,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           '📍 Геолокация подключена! Трекинг работает в фоне.\n\nМожете свернуть приложение — маршрут записывается.'
         );
       }
-    } else {
-      // No active run — let user know
-      await sendMessage(msg.from.id,
-        '⚠️ Нет активного забега. Сначала нажмите START в приложении.'
-      );
     }
 
     return res.status(200).json({ ok: true });
