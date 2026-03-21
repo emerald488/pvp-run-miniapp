@@ -65,10 +65,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Capture hex in real-time
       const h3Index = latLngToCell(latitude, longitude, HEX_RESOLUTION);
 
-      // Get user color
+      // Check previous owner
+      const { data: prevZone } = await supabase
+        .from('zones')
+        .select('owner_id')
+        .eq('h3_index', h3Index)
+        .single();
+
+      const prevOwnerId = prevZone?.owner_id;
+
+      // Get user info
       const { data: userData } = await supabase
         .from('users')
-        .select('color')
+        .select('color, first_name')
         .eq('id', userId)
         .single();
       const color = userData?.color || '#4285f4';
@@ -82,6 +91,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
         { onConflict: 'h3_index' },
       );
+
+      // Notify previous owner if territory was stolen
+      if (prevOwnerId && prevOwnerId !== userId) {
+        const attackerName = userData?.first_name || 'Игрок';
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: prevOwnerId,
+            text: `⚔️ Ваша территория захвачена игроком ${attackerName}!`,
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
+              ]],
+            },
+          }),
+        }).catch(() => {});
+      }
 
       // Send confirmation on first point
       if (count === 0) {
