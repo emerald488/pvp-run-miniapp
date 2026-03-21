@@ -249,7 +249,7 @@ body,
 /* Top Buttons */
 .top-buttons {
   position: absolute;
-  top: 12px;
+  top: 56px;
   right: 12px;
   z-index: 10;
   display: flex;
