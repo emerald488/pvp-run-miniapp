@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { GameMap } from './components/Map';
 import { RunPanel } from './components/RunPanel';
+import { Profile } from './components/Profile';
 import { useLocation } from './hooks/useLocation';
 import { useTelegram } from './hooks/useTelegram';
 import { useAuth } from './contexts/AuthContext';
@@ -8,9 +9,10 @@ import { useRun } from './hooks/useRun';
 
 function App() {
   const { isReady } = useTelegram();
-  const { isLoading: authLoading, error: authError } = useAuth();
+  const { isLoading: authLoading, error: authError, token, user } = useAuth();
   const location = useLocation();
-  const run = useRun();
+  const run = useRun(token);
+  const [showProfile, setShowProfile] = useState(false);
 
   // Feed GPS points to the run tracker
   useEffect(() => {
@@ -48,6 +50,10 @@ function App() {
     );
   }
 
+  if (showProfile && user && token) {
+    return <Profile user={user} token={token} onClose={() => setShowProfile(false)} />;
+  }
+
   const trackCoords = run.points.map((p) => p.coordinates);
 
   return (
@@ -57,6 +63,9 @@ function App() {
         trackPoints={trackCoords}
         territory={run.territory}
       />
+      <button className="profile-btn" onClick={() => setShowProfile(true)}>
+        {user?.first_name?.[0] || '?'}
+      </button>
       <RunPanel
         isRunning={run.isRunning}
         distance={run.distance}

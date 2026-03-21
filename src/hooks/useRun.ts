@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { UserCoordinates } from '../types/location';
 import type { RunState, RunPoint } from '../types/run';
+import { saveRun } from '../lib/runs';
 
 const CLOSE_DISTANCE_M = 30; // distance to start point to close the loop
 const MIN_POINTS_FOR_CLOSE = 20; // minimum points before allowing closure
@@ -16,7 +17,7 @@ function haversine(a: UserCoordinates, b: UserCoordinates): number {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-export function useRun() {
+export function useRun(token: string | null) {
   const [state, setState] = useState<RunState>({
     isRunning: false,
     points: [],
@@ -48,8 +49,23 @@ export function useRun() {
 
   const stop = useCallback(() => {
     clearInterval(intervalRef.current);
-    setState((prev) => ({ ...prev, isRunning: false }));
-  }, []);
+    setState((prev) => {
+      // Save run to server
+      if (token && prev.points.length > 1) {
+        const track = prev.points.map((p) => p.coordinates);
+        saveRun(token, {
+          startedAt: new Date(startTimeRef.current).toISOString(),
+          finishedAt: new Date().toISOString(),
+          distanceM: prev.distance,
+          durationS: prev.duration,
+          avgSpeedKmh: prev.speed,
+          track,
+          territory: prev.territory,
+        });
+      }
+      return { ...prev, isRunning: false };
+    });
+  }, [token]);
 
   const addPoint = useCallback((coords: UserCoordinates) => {
     setState((prev) => {
