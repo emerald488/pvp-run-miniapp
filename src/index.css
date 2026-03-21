@@ -366,3 +366,77 @@ body,
   font-weight: 600;
   color: #fff;
 }
+
+/* Player Popup */
+.player-popup-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+.player-popup {
+  background: #1e1e36;
+  border-radius: 20px;
+  padding: 20px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.popup-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.popup-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.popup-username {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.popup-stats {
+  display: flex;
+  justify-content: space-around;
+}
+
+.popup-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.popup-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.popup-stat-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 2px;
+}

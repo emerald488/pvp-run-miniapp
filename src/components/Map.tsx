@@ -21,9 +21,10 @@ interface MapProps {
   serverZones: globalThis.Map<string, ZoneOwner>;
   otherPlayers: OtherPlayer[];
   userColor?: string;
+  onHexTap?: (ownerId: string) => void;
 }
 
-export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, otherPlayers, userColor = '#4285f4' }: MapProps) {
+export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, otherPlayers, userColor = '#4285f4', onHexTap }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -92,6 +93,18 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
           'line-width': 0.5,
         },
       });
+    });
+
+    // Tap on owned hex → show player info
+    map.on('click', 'hex-fill', (e) => {
+      const props = e.features?.[0]?.properties;
+      if (!props?.owned || !props?.h3Index) return;
+
+      // Find owner from serverZones
+      const zone = serverZones.get(props.h3Index);
+      if (zone?.ownerId && onHexTap) {
+        onHexTap(zone.ownerId);
+      }
     });
 
     return () => {
