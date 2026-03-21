@@ -32,7 +32,9 @@ export function RunPanel({
       {isRunning && (
         <div className={`live-indicator ${liveTracking ? '' : 'inactive'}`}>
           <span className="live-dot" />
-          {liveTracking ? 'Live tracking' : 'Waiting for location...'}
+          {liveTracking
+            ? 'Трекинг активен'
+            : 'Сверните приложение и поделитесь геопозицией с ботом'}
         </div>
       )}
 
