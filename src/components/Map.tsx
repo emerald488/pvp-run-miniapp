@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import type { UserCoordinates } from '../types/location';
-import { getVisibleHexes, buildHexGeoJSON } from '../lib/hexGrid';
+import { getVisibleHexes, buildHexGeoJSON, type ZoneOwner } from '../lib/hexGrid';
 
 const HEX_SOURCE = 'hex-grid';
 const MIN_HEX_ZOOM = 13;
@@ -10,10 +10,11 @@ interface MapProps {
   coordinates: UserCoordinates | null;
   trackPoints: UserCoordinates[];
   ownedHexes: Set<string>;
+  serverZones: globalThis.Map<string, ZoneOwner>;
   userColor?: string;
 }
 
-export function GameMap({ coordinates, trackPoints, ownedHexes, userColor = '#4285f4' }: MapProps) {
+export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, userColor = '#4285f4' }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -147,12 +148,12 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, userColor = '#42
         west: b.getWest(),
       });
 
-      const geojson = buildHexGeoJSON(visibleHexes, ownedHexes, userColor);
+      const geojson = buildHexGeoJSON(visibleHexes, serverZones, ownedHexes, userColor);
       source.setData(geojson);
     } catch {
       // ignore
     }
-  }, [ownedHexes, userColor, coordinates]);
+  }, [ownedHexes, serverZones, userColor, coordinates]);
 
   // Also update hexes on map move
   useEffect(() => {
@@ -177,7 +178,7 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, userColor = '#42
             north: b.getNorth(), south: b.getSouth(),
             east: b.getEast(), west: b.getWest(),
           });
-          const geojson = buildHexGeoJSON(visibleHexes, ownedHexes, userColor);
+          const geojson = buildHexGeoJSON(visibleHexes, serverZones, ownedHexes, userColor);
           source.setData(geojson);
         } catch { /* ignore */ }
       }, 150);
@@ -185,7 +186,7 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, userColor = '#42
 
     map.on('moveend', onMove);
     return () => { map.off('moveend', onMove); clearTimeout(timer); };
-  }, [ownedHexes, userColor]);
+  }, [ownedHexes, serverZones, userColor]);
 
   return (
     <div

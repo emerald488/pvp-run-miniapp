@@ -3,6 +3,11 @@ import type { UserCoordinates } from '../types/location';
 
 const HEX_RESOLUTION = 10;
 
+export interface ZoneOwner {
+  ownerId: string;
+  ownerColor: string;
+}
+
 export function getVisibleHexes(bounds: {
   north: number;
   south: number;
@@ -16,16 +21,13 @@ export function getVisibleHexes(bounds: {
     [bounds.south, bounds.west],
     [bounds.north, bounds.west],
   ];
-
   return polygonToCells(polygon, HEX_RESOLUTION);
 }
 
-// Get the hex cell for a coordinate
 export function coordToHex(coord: UserCoordinates): string {
   return latLngToCell(coord.latitude, coord.longitude, HEX_RESOLUTION);
 }
 
-// Get all hex cells along a track
 export function trackToHexes(track: UserCoordinates[]): string[] {
   const hexSet = new Set<string>();
   for (const coord of track) {
@@ -34,22 +36,21 @@ export function trackToHexes(track: UserCoordinates[]): string[] {
   return Array.from(hexSet);
 }
 
-// Get all hex cells inside a closed polygon
 export function polygonToHexes(polygon: UserCoordinates[]): string[] {
   if (polygon.length < 3) return [];
   const coords: [number, number][] = polygon.map((c) => [c.latitude, c.longitude]);
-  // Close the polygon if not closed
   if (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1]) {
     coords.push(coords[0]);
   }
   return polygonToCells(coords, HEX_RESOLUTION);
 }
 
-// Build GeoJSON for hex grid with ownership
+// Build GeoJSON with support for multiple owners + local (current run) hexes
 export function buildHexGeoJSON(
   hexIndexes: string[],
-  ownedHexes: Set<string>,
-  ownerColor: string,
+  serverZones: globalThis.Map<string, ZoneOwner>,
+  localHexes: Set<string>,
+  localColor: string,
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
 
@@ -58,19 +59,15 @@ export function buildHexGeoJSON(
     const coords = boundary.map(([lat, lng]) => [lng, lat] as [number, number]);
     coords.push(coords[0]);
 
-    const owned = ownedHexes.has(h3Index);
+    const serverOwner = serverZones.get(h3Index);
+    const isLocal = localHexes.has(h3Index);
+    const owned = !!serverOwner || isLocal;
+    const color = serverOwner ? serverOwner.ownerColor : isLocal ? localColor : '#333344';
 
     features.push({
       type: 'Feature',
-      properties: {
-        h3Index,
-        owned,
-        color: owned ? ownerColor : '#333344',
-      },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [coords],
-      },
+      properties: { h3Index, owned, color },
+      geometry: { type: 'Polygon', coordinates: [coords] },
     });
   }
 

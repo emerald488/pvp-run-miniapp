@@ -1,19 +1,46 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GameMap } from './components/Map';
 import { RunPanel } from './components/RunPanel';
 import { Profile } from './components/Profile';
+import { Leaderboard } from './components/Leaderboard';
 import { useLocation } from './hooks/useLocation';
 import { useTelegram } from './hooks/useTelegram';
 import { useAuth } from './contexts/AuthContext';
 import { useRun } from './hooks/useRun';
-import { trackToHexes, polygonToHexes } from './lib/hexGrid';
+import { trackToHexes, polygonToHexes, type ZoneOwner } from './lib/hexGrid';
 
 function App() {
   const { isReady } = useTelegram();
   const { isLoading: authLoading, error: authError, token, user } = useAuth();
   const location = useLocation();
   const run = useRun(token);
-  const [showProfile, setShowProfile] = useState(false);
+  const [screen, setScreen] = useState<'map' | 'profile' | 'leaderboard'>('map');
+  const [serverZones, setServerZones] = useState(new globalThis.Map<string, ZoneOwner>());
+
+  // Fetch all captured zones from server
+  const loadZones = useCallback(async () => {
+    try {
+      const res = await fetch('/api/zones');
+      const data = await res.json();
+      const map = new globalThis.Map<string, ZoneOwner>();
+      for (const z of data.zones || []) {
+        map.set(z.h3_index, { ownerId: z.owner_id, ownerColor: z.owner_color });
+      }
+      setServerZones(map);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Load zones on mount and periodically
+  useEffect(() => {
+    loadZones();
+    const interval = setInterval(loadZones, 15000);
+    return () => clearInterval(interval);
+  }, [loadZones]);
+
+  // Reload zones when run stops
+  useEffect(() => {
+    if (!run.isRunning) loadZones();
+  }, [run.isRunning]);
 
   // Feed GPS points to the run tracker
   useEffect(() => {
@@ -22,25 +49,19 @@ function App() {
     }
   }, [location.coordinates]);
 
-  // Calculate owned hexes from track + territory
-  const ownedHexes = useMemo(() => {
+  // Local hexes from current run
+  const localHexes = useMemo(() => {
     const hexSet = new Set<string>();
-
-    // Hexes along the track
     if (run.points.length > 0) {
-      const trackCoords = run.points.map((p) => p.coordinates);
-      for (const hex of trackToHexes(trackCoords)) {
+      for (const hex of trackToHexes(run.points.map((p) => p.coordinates))) {
         hexSet.add(hex);
       }
     }
-
-    // Hexes inside closed territory
     if (run.territory) {
       for (const hex of polygonToHexes(run.territory)) {
         hexSet.add(hex);
       }
     }
-
     return hexSet;
   }, [run.points, run.territory]);
 
@@ -73,8 +94,12 @@ function App() {
     );
   }
 
-  if (showProfile && user && token) {
-    return <Profile user={user} token={token} onClose={() => setShowProfile(false)} />;
+  if (screen === 'profile' && user && token) {
+    return <Profile user={user} token={token} onClose={() => setScreen('map')} />;
+  }
+
+  if (screen === 'leaderboard') {
+    return <Leaderboard onClose={() => setScreen('map')} />;
   }
 
   const trackCoords = run.points.map((p) => p.coordinates);
@@ -84,11 +109,15 @@ function App() {
       <GameMap
         coordinates={location.coordinates}
         trackPoints={trackCoords}
-        ownedHexes={ownedHexes}
+        ownedHexes={localHexes}
+        serverZones={serverZones}
       />
-      <button className="profile-btn" onClick={() => setShowProfile(true)}>
-        {user?.first_name?.[0] || '?'}
-      </button>
+      <div className="top-buttons">
+        <button className="top-btn" onClick={() => setScreen('leaderboard')}>🏆</button>
+        <button className="top-btn" onClick={() => setScreen('profile')}>
+          {user?.first_name?.[0] || '?'}
+        </button>
+      </div>
       <RunPanel
         isRunning={run.isRunning}
         distance={run.distance}

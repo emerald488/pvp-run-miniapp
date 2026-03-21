@@ -224,12 +224,17 @@ body,
   50% { opacity: 0.3; }
 }
 
-/* Profile Button */
-.profile-btn {
+/* Top Buttons */
+.top-buttons {
   position: absolute;
   top: 12px;
   right: 12px;
   z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.top-btn {
   width: 40px;
   height: 40px;
   border-radius: 50%;

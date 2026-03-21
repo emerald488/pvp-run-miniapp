@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UserCoordinates } from '../types/location';
 import type { RunState, RunPoint } from '../types/run';
+import { trackToHexes, polygonToHexes } from '../lib/hexGrid';
 
 const CLOSE_DISTANCE_M = 30;
 const MIN_POINTS_FOR_CLOSE = 20;
@@ -139,6 +140,30 @@ export function useRun(token: string | null) {
       } catch {
         // ignore
       }
+
+      // Capture hexes from track + territory
+      setState((prev) => {
+        const hexSet = new Set<string>();
+        const trackCoords = prev.points.map((p) => p.coordinates);
+        for (const h of trackToHexes(trackCoords)) hexSet.add(h);
+        if (prev.territory) {
+          for (const h of polygonToHexes(prev.territory)) hexSet.add(h);
+        }
+
+        if (hexSet.size > 0) {
+          fetch('/api/zones', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ hexes: Array.from(hexSet) }),
+          }).catch(() => {});
+        }
+
+        return { ...prev, isRunning: false };
+      });
+      return;
     }
 
     setState((prev) => ({ ...prev, isRunning: false }));
