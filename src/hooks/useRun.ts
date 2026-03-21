@@ -169,8 +169,20 @@ export function useRun(token: string | null) {
     setState((prev) => ({ ...prev, isRunning: false }));
   }, [token]);
 
-  // Also feed GPS points locally (as backup when bot location isn't available)
+  // Feed GPS points locally + send to server
   const addPoint = useCallback((coords: UserCoordinates) => {
+    // Send to server (fire-and-forget)
+    if (token) {
+      fetch('/api/track-point', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude }),
+      }).catch(() => {});
+    }
+
     setState((prev) => {
       if (!prev.isRunning) return prev;
 
@@ -197,7 +209,7 @@ export function useRun(token: string | null) {
 
       return { ...prev, points: newPoints, distance: newDistance, duration: elapsed, speed, territory };
     });
-  }, []);
+  }, [token]);
 
   // Restore active run on mount
   useEffect(() => {
