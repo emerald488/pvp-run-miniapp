@@ -20,16 +20,13 @@ function App() {
   const [serverZones, setServerZones] = useState(new globalThis.Map<string, ZoneOwner>());
   const [otherPlayers, setOtherPlayers] = useState<OtherPlayer[]>([]);
 
-  // Initial load of zones
+  // Initial load of zones via API (reliable fallback)
   const loadZones = useCallback(async () => {
     try {
-      const { data } = await supabase
-        .from('zones')
-        .select('h3_index, owner_id, owner_color')
-        .not('owner_id', 'is', null);
-
+      const res = await fetch('/api/zones');
+      const data = await res.json();
       const map = new globalThis.Map<string, ZoneOwner>();
-      for (const z of data || []) {
+      for (const z of data.zones || []) {
         map.set(z.h3_index, { ownerId: z.owner_id, ownerColor: z.owner_color });
       }
       setServerZones(map);
