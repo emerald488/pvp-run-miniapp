@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import type { UserCoordinates } from '../types/location';
-import { getVisibleHexes, buildHexGeoJSON, type ZoneOwner } from '../lib/hexGrid';
+import { getVisibleHexes, type ZoneOwner } from '../lib/hexGrid';
+import { cellToBoundary } from 'h3-js';
 
-const HEX_SOURCE = 'hex-grid';
-const GRID_ZOOM = 14;  // Show full grid at this zoom and above
+const GRID_SOURCE = 'hex-grid';
+const OWNED_SOURCE = 'owned-zones';
+const GRID_ZOOM = 14;
 
 export interface OtherPlayer {
   userId: string;
@@ -21,6 +23,32 @@ interface MapProps {
   serverZones: globalThis.Map<string, ZoneOwner>;
   otherPlayers: OtherPlayer[];
   userColor?: string;
+}
+
+function buildOwnedGeoJSON(
+  serverZones: globalThis.Map<string, ZoneOwner>,
+  localHexes: Set<string>,
+  localColor: string,
+): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  const allKeys = new Set([...serverZones.keys(), ...localHexes]);
+
+  for (const h3Index of allKeys) {
+    const boundary = cellToBoundary(h3Index);
+    const coords = boundary.map(([lat, lng]) => [lng, lat] as [number, number]);
+    coords.push(coords[0]);
+
+    const server = serverZones.get(h3Index);
+    const color = server ? server.ownerColor : localColor;
+
+    features.push({
+      type: 'Feature',
+      properties: { h3Index, color },
+      geometry: { type: 'Polygon', coordinates: [coords] },
+    });
+  }
+
+  return { type: 'FeatureCollection', features };
 }
 
 export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, otherPlayers, userColor = '#4285f4' }: MapProps) {
@@ -59,50 +87,45 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
         type: 'geojson',
         data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
       });
-
       map.addLayer({
-        id: 'track-line',
-        type: 'line',
-        source: 'track',
-        paint: {
-          'line-color': '#4285f4',
-          'line-width': 4,
-          'line-opacity': 0.9,
-        },
+        id: 'track-line', type: 'line', source: 'track',
+        paint: { 'line-color': '#4285f4', 'line-width': 4, 'line-opacity': 0.9 },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
 
-      // Hex grid
-      map.addSource(HEX_SOURCE, {
+      // Owned zones — always visible, independent of viewport
+      map.addSource(OWNED_SOURCE, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
-
       map.addLayer({
-        id: 'hex-fill',
-        type: 'fill',
-        source: HEX_SOURCE,
-        paint: {
-          'fill-color': ['get', 'color'],
-          'fill-opacity': ['case', ['get', 'owned'], 0.4, 0.06],
-        },
+        id: 'owned-fill', type: 'fill', source: OWNED_SOURCE,
+        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.4 },
+      });
+      map.addLayer({
+        id: 'owned-border', type: 'line', source: OWNED_SOURCE,
+        paint: { 'line-color': isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)', 'line-width': 1 },
       });
 
+      // Empty grid — only at high zoom
+      map.addSource(GRID_SOURCE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
       map.addLayer({
-        id: 'hex-border',
-        type: 'line',
-        source: HEX_SOURCE,
-        paint: {
-          'line-color': isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
-          'line-width': 0.5,
-        },
+        id: 'grid-fill', type: 'fill', source: GRID_SOURCE,
+        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.06 },
+      });
+      map.addLayer({
+        id: 'grid-border', type: 'line', source: GRID_SOURCE,
+        paint: { 'line-color': isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', 'line-width': 0.5 },
       });
     });
 
-    // Tap on owned hex → show MapLibre popup with player info
-    map.on('click', 'hex-fill', async (e) => {
+    // Tap on owned zone → show player info popup
+    map.on('click', 'owned-fill', async (e) => {
       const props = e.features?.[0]?.properties;
-      if (!props?.owned || !props?.h3Index) return;
+      if (!props?.h3Index) return;
 
       const zone = serverZones.get(props.h3Index);
       if (!zone?.ownerId) return;
@@ -120,22 +143,20 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
           ? `<img src="${player.photo_url}" class="popup-photo" />`
           : `<div class="popup-photo-placeholder" style="background:${zone.ownerColor}">${player.first_name[0]}</div>`;
 
-        const html = `
-          <div class="map-popup">
-            ${photoHtml}
-            <div class="map-popup-name">${player.first_name}</div>
-            ${player.username ? `<div class="map-popup-user">@${player.username}</div>` : ''}
-            <div class="map-popup-stats">
-              <span>🔷 ${player.total_territories} зон</span>
-              <span>🏃 ${player.total_runs} заб.</span>
-              <span>📏 ${distStr}</span>
-            </div>
-          </div>
-        `;
-
         new maplibregl.Popup({ closeButton: true, maxWidth: '220px' })
           .setLngLat(e.lngLat)
-          .setHTML(html)
+          .setHTML(`
+            <div class="map-popup">
+              ${photoHtml}
+              <div class="map-popup-name">${player.first_name}</div>
+              ${player.username ? `<div class="map-popup-user">@${player.username}</div>` : ''}
+              <div class="map-popup-stats">
+                <span>🔷 ${player.total_territories} зон</span>
+                <span>🏃 ${player.total_runs} заб.</span>
+                <span>📏 ${distStr}</span>
+              </div>
+            </div>
+          `)
           .addTo(map);
       } catch { /* ignore */ }
     });
@@ -174,7 +195,6 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
     if (!map || !map.isStyleLoaded()) return;
     const source = map.getSource('track') as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
-
     source.setData({
       type: 'Feature',
       geometry: { type: 'LineString', coordinates: trackPoints.map((p) => [p.longitude, p.latitude]) },
@@ -182,78 +202,76 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
     });
   }, [trackPoints]);
 
-  // Update hex grid
+  // Update owned zones — always visible
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    const source = map.getSource(HEX_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    const source = map.getSource(OWNED_SOURCE) as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
 
     try {
-      const zoom = map.getZoom();
-      const b = map.getBounds();
+      const geojson = buildOwnedGeoJSON(serverZones, ownedHexes, userColor);
+      source.setData(geojson);
+    } catch { /* ignore */ }
+  }, [serverZones, ownedHexes, userColor]);
 
-      if (zoom >= GRID_ZOOM) {
-        // High zoom: show full grid + owned hexes
-        const visibleHexes = getVisibleHexes({
-          north: b.getNorth(), south: b.getSouth(),
-          east: b.getEast(), west: b.getWest(),
-        });
-        const geojson = buildHexGeoJSON(visibleHexes, serverZones, ownedHexes, userColor);
-        source.setData(geojson);
-      } else {
-        // Low zoom: show only owned/captured hexes (no empty grid)
-        const allOwned = new Set([...ownedHexes, ...serverZones.keys()]);
-        if (allOwned.size > 0) {
-          const geojson = buildHexGeoJSON(Array.from(allOwned), serverZones, ownedHexes, userColor);
-          source.setData(geojson);
-        } else {
-          source.setData({ type: 'FeatureCollection', features: [] });
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }, [ownedHexes, serverZones, userColor, coordinates]);
-
-  // Also update hexes on map move
+  // Update empty grid on map move (only at high zoom)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     let timer: ReturnType<typeof setTimeout>;
-    const onMove = () => {
+    const updateGrid = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
         if (!map.isStyleLoaded()) return;
-        const source = map.getSource(HEX_SOURCE) as maplibregl.GeoJSONSource | undefined;
+        const source = map.getSource(GRID_SOURCE) as maplibregl.GeoJSONSource | undefined;
         if (!source) return;
+
+        const zoom = map.getZoom();
+        if (zoom < GRID_ZOOM) {
+          source.setData({ type: 'FeatureCollection', features: [] });
+          return;
+        }
+
         try {
-          const zoom = map.getZoom();
           const b = map.getBounds();
-          if (zoom >= GRID_ZOOM) {
-            const visibleHexes = getVisibleHexes({
-              north: b.getNorth(), south: b.getSouth(),
-              east: b.getEast(), west: b.getWest(),
-            });
-            const geojson = buildHexGeoJSON(visibleHexes, serverZones, ownedHexes, userColor);
-            source.setData(geojson);
-          } else {
-            const allOwned = new Set([...ownedHexes, ...serverZones.keys()]);
-            if (allOwned.size > 0) {
-              const geojson = buildHexGeoJSON(Array.from(allOwned), serverZones, ownedHexes, userColor);
-              source.setData(geojson);
-            } else {
-              source.setData({ type: 'FeatureCollection', features: [] });
-            }
-          }
+          const allOwned = new Set([...ownedHexes, ...serverZones.keys()]);
+          const visibleHexes = getVisibleHexes({
+            north: b.getNorth(), south: b.getSouth(),
+            east: b.getEast(), west: b.getWest(),
+          });
+          // Only show unowned hexes in grid
+          const emptyHexes = visibleHexes.filter((h) => !allOwned.has(h));
+          const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const neutralColor = isDark ? '#333344' : '#dde0e6';
+
+          const features: GeoJSON.Feature[] = emptyHexes.map((h3Index) => {
+            const boundary = cellToBoundary(h3Index);
+            const coords = boundary.map(([lat, lng]) => [lng, lat] as [number, number]);
+            coords.push(coords[0]);
+            return {
+              type: 'Feature' as const,
+              properties: { h3Index, color: neutralColor },
+              geometry: { type: 'Polygon' as const, coordinates: [coords] },
+            };
+          });
+
+          source.setData({ type: 'FeatureCollection', features });
         } catch { /* ignore */ }
-      }, 150);
+      }, 200);
     };
 
-    map.on('moveend', onMove);
-    return () => { map.off('moveend', onMove); clearTimeout(timer); };
-  }, [ownedHexes, serverZones, userColor]);
+    map.on('moveend', updateGrid);
+    map.on('zoomend', updateGrid);
+    updateGrid();
+
+    return () => {
+      map.off('moveend', updateGrid);
+      map.off('zoomend', updateGrid);
+      clearTimeout(timer);
+    };
+  }, [ownedHexes, serverZones]);
 
   // Update other players markers
   useEffect(() => {
@@ -261,16 +279,10 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
     if (!map) return;
 
     const currentIds = new Set(otherPlayers.map((p) => p.userId));
-
-    // Remove markers for players no longer active
     for (const [id, marker] of playerMarkersRef.current) {
-      if (!currentIds.has(id)) {
-        marker.remove();
-        playerMarkersRef.current.delete(id);
-      }
+      if (!currentIds.has(id)) { marker.remove(); playerMarkersRef.current.delete(id); }
     }
 
-    // Add/update markers
     for (const player of otherPlayers) {
       let marker = playerMarkersRef.current.get(player.userId);
       if (!marker) {
@@ -279,7 +291,6 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
         el.style.background = player.color;
         el.title = player.name;
         el.innerHTML = `<span>${player.name[0]}</span>`;
-
         marker = new maplibregl.Marker({ element: el })
           .setLngLat([player.longitude, player.latitude])
           .addTo(map);
