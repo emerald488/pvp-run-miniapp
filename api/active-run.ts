@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 
+const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const SUPABASE_URL = process.env.RunPVP_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.RunPVP_SUPABASE_SERVICE_ROLE_KEY!;
 const JWT_SECRET = process.env.RunPVP_SUPABASE_JWT_SECRET!;
@@ -61,6 +62,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single();
 
     if (error) return res.status(500).json({ error: 'Failed to start run' });
+
+    // Send instruction message via bot
+    const telegramId = userId; // user.id is telegram_id as string
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: telegramId,
+        text: '🏃 Забег начат!\n\nДля фонового трекинга:\n1. Нажмите 📎 внизу\n2. Location → Share Live Location\n3. Выберите время (1 час)\n\nТрек будет записываться даже при свёрнутом приложении.',
+      }),
+    }).catch(() => {});
+
     return res.status(200).json({ runId: data.id, startedAt: data.started_at });
   }
 
