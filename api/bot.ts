@@ -65,49 +65,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Capture hex in real-time
       const h3Index = latLngToCell(latitude, longitude, HEX_RESOLUTION);
 
-      // Check previous owner
+      // Check previous owner + cooldown
       const { data: prevZone } = await supabase
         .from('zones')
-        .select('owner_id')
+        .select('owner_id, captured_at')
         .eq('h3_index', h3Index)
         .single();
 
       const prevOwnerId = prevZone?.owner_id;
+      const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
 
-      // Get user info
-      const { data: userData } = await supabase
-        .from('users')
-        .select('color, first_name')
-        .eq('id', userId)
-        .single();
-      const color = userData?.color || '#4285f4';
+      // Skip if zone belongs to another player and cooldown hasn't expired
+      if (prevOwnerId && prevOwnerId !== userId && prevZone?.captured_at) {
+        const elapsed = Date.now() - new Date(prevZone.captured_at).getTime();
+        if (elapsed < COOLDOWN_MS) {
+          // Cooldown active — skip capture
+        } else {
+          // Cooldown expired — allow capture
+          const { data: userData } = await supabase
+            .from('users')
+            .select('color, first_name')
+            .eq('id', userId)
+            .single();
+          const color = userData?.color || '#4285f4';
 
-      await supabase.from('zones').upsert(
-        {
-          h3_index: h3Index,
-          owner_id: userId,
-          owner_color: color,
-          captured_at: timestamp,
-        },
-        { onConflict: 'h3_index' },
-      );
+          await supabase.from('zones').upsert(
+            { h3_index: h3Index, owner_id: userId, owner_color: color, captured_at: timestamp },
+            { onConflict: 'h3_index' },
+          );
 
-      // Notify previous owner if territory was stolen
-      if (prevOwnerId && prevOwnerId !== userId) {
-        const attackerName = userData?.first_name || 'Игрок';
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: prevOwnerId,
-            text: `⚔️ Ваша территория захвачена игроком ${attackerName}!`,
-            reply_markup: {
-              inline_keyboard: [[
-                { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
-              ]],
-            },
-          }),
-        }).catch(() => {});
+          // Notify
+          const attackerName = userData?.first_name || 'Игрок';
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: prevOwnerId,
+              text: `⚔️ Ваша территория захвачена игроком ${attackerName}!`,
+              reply_markup: {
+                inline_keyboard: [[
+                  { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
+                ]],
+              },
+            }),
+          }).catch(() => {});
+        }
+      } else if (!prevOwnerId || prevOwnerId === userId) {
+        // Unclaimed or own zone — always capture
+        const { data: userData } = await supabase
+          .from('users')
+          .select('color, first_name')
+          .eq('id', userId)
+          .single();
+        const color = userData?.color || '#4285f4';
+
+        await supabase.from('zones').upsert(
+          { h3_index: h3Index, owner_id: userId, owner_color: color, captured_at: timestamp },
+          { onConflict: 'h3_index' },
+        );
       }
 
       // Send confirmation on first point

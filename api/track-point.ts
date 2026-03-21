@@ -49,47 +49,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     timestamp,
   });
 
-  // Capture hex
+  // Capture hex with 30-min cooldown
   const h3Index = latLngToCell(latitude, longitude, HEX_RESOLUTION);
+  const COOLDOWN_MS = 30 * 60 * 1000;
 
   const { data: prevZone } = await supabase
     .from('zones')
-    .select('owner_id')
+    .select('owner_id, captured_at')
     .eq('h3_index', h3Index)
     .single();
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('color, first_name')
-    .eq('id', userId)
-    .single();
+  const canCapture = !prevZone?.owner_id
+    || prevZone.owner_id === userId
+    || (Date.now() - new Date(prevZone.captured_at || 0).getTime()) >= COOLDOWN_MS;
 
-  await supabase.from('zones').upsert(
-    {
-      h3_index: h3Index,
-      owner_id: userId,
-      owner_color: userData?.color || '#4285f4',
-      captured_at: timestamp,
-    },
-    { onConflict: 'h3_index' },
-  );
+  if (canCapture) {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('color, first_name')
+      .eq('id', userId)
+      .single();
 
-  // Notify previous owner
-  if (prevZone?.owner_id && prevZone.owner_id !== userId) {
-    const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
-    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: prevZone.owner_id,
-        text: `⚔️ Ваша территория захвачена игроком ${userData?.first_name || 'Игрок'}!`,
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
-          ]],
-        },
-      }),
-    }).catch(() => {});
+    await supabase.from('zones').upsert(
+      {
+        h3_index: h3Index,
+        owner_id: userId,
+        owner_color: userData?.color || '#4285f4',
+        captured_at: timestamp,
+      },
+      { onConflict: 'h3_index' },
+    );
+
+    // Notify previous owner if stolen
+    if (prevZone?.owner_id && prevZone.owner_id !== userId) {
+      const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+      fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: prevZone.owner_id,
+          text: `⚔️ Ваша территория захвачена игроком ${userData?.first_name || 'Игрок'}!`,
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
+            ]],
+          },
+        }),
+      }).catch(() => {});
+    }
   }
 
   return res.status(200).json({ ok: true });
