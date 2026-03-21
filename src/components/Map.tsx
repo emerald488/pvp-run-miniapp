@@ -205,14 +205,22 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
   // Update owned zones — always visible
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    const source = map.getSource(OWNED_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (!source) return;
+    if (!map) return;
 
-    try {
-      const geojson = buildOwnedGeoJSON(serverZones, ownedHexes, userColor);
-      source.setData(geojson);
-    } catch { /* ignore */ }
+    const update = () => {
+      const source = map.getSource(OWNED_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      if (!source) return;
+      try {
+        const geojson = buildOwnedGeoJSON(serverZones, ownedHexes, userColor);
+        source.setData(geojson);
+      } catch { /* ignore */ }
+    };
+
+    if (map.isStyleLoaded()) {
+      update();
+    } else {
+      map.once('load', update);
+    }
   }, [serverZones, ownedHexes, userColor]);
 
   // Update empty grid on map move (only at high zoom)
