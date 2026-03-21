@@ -1,14 +1,19 @@
 import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import type { UserCoordinates } from '../types/location';
+import { getVisibleHexes, buildHexGeoJSON } from '../lib/hexGrid';
+
+const HEX_SOURCE = 'hex-grid';
+const MIN_HEX_ZOOM = 13;
 
 interface MapProps {
   coordinates: UserCoordinates | null;
   trackPoints: UserCoordinates[];
-  territory: UserCoordinates[] | null;
+  ownedHexes: Set<string>;
+  userColor?: string;
 }
 
-export function GameMap({ coordinates, trackPoints, territory }: MapProps) {
+export function GameMap({ coordinates, trackPoints, ownedHexes, userColor = '#4285f4' }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -33,7 +38,7 @@ export function GameMap({ coordinates, trackPoints, territory }: MapProps) {
     map.on('load', () => {
       map.resize();
 
-      // Track line source & layer
+      // Track line
       map.addSource('track', {
         type: 'geojson',
         data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: {} },
@@ -48,36 +53,32 @@ export function GameMap({ coordinates, trackPoints, territory }: MapProps) {
           'line-width': 4,
           'line-opacity': 0.9,
         },
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
 
-      // Territory polygon source & layer
-      map.addSource('territory', {
+      // Hex grid
+      map.addSource(HEX_SOURCE, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
 
       map.addLayer({
-        id: 'territory-fill',
+        id: 'hex-fill',
         type: 'fill',
-        source: 'territory',
+        source: HEX_SOURCE,
         paint: {
-          'fill-color': '#4285f4',
-          'fill-opacity': 0.25,
+          'fill-color': ['get', 'color'],
+          'fill-opacity': ['case', ['get', 'owned'], 0.4, 0.06],
         },
       });
 
       map.addLayer({
-        id: 'territory-border',
+        id: 'hex-border',
         type: 'line',
-        source: 'territory',
+        source: HEX_SOURCE,
         paint: {
-          'line-color': '#4285f4',
-          'line-width': 2,
-          'line-opacity': 0.7,
+          'line-color': 'rgba(255,255,255,0.2)',
+          'line-width': 0.5,
         },
       });
     });
@@ -97,7 +98,6 @@ export function GameMap({ coordinates, trackPoints, territory }: MapProps) {
       const el = document.createElement('div');
       el.className = 'user-marker';
       el.innerHTML = '<div class="user-marker-pulse"></div><div class="user-marker-dot"></div>';
-
       markerRef.current = new maplibregl.Marker({ element: el })
         .setLngLat([coordinates.longitude, coordinates.latitude])
         .addTo(map);
@@ -115,40 +115,77 @@ export function GameMap({ coordinates, trackPoints, territory }: MapProps) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-
     const source = map.getSource('track') as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
 
-    const lineCoords = trackPoints.map((p) => [p.longitude, p.latitude]);
     source.setData({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: lineCoords },
+      geometry: { type: 'LineString', coordinates: trackPoints.map((p) => [p.longitude, p.latitude]) },
       properties: {},
     });
   }, [trackPoints]);
 
-  // Update territory polygon
+  // Update hex grid
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-
-    const source = map.getSource('territory') as maplibregl.GeoJSONSource | undefined;
+    const source = map.getSource(HEX_SOURCE) as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
 
-    if (territory) {
-      const polyCoords = territory.map((p) => [p.longitude, p.latitude]);
-      source.setData({
-        type: 'FeatureCollection',
-        features: [{
-          type: 'Feature',
-          geometry: { type: 'Polygon', coordinates: [polyCoords] },
-          properties: {},
-        }],
-      });
-    } else {
+    const zoom = map.getZoom();
+    if (zoom < MIN_HEX_ZOOM) {
       source.setData({ type: 'FeatureCollection', features: [] });
+      return;
     }
-  }, [territory]);
+
+    try {
+      const b = map.getBounds();
+      const visibleHexes = getVisibleHexes({
+        north: b.getNorth(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        west: b.getWest(),
+      });
+
+      const geojson = buildHexGeoJSON(visibleHexes, ownedHexes, userColor);
+      source.setData(geojson);
+    } catch {
+      // ignore
+    }
+  }, [ownedHexes, userColor, coordinates]);
+
+  // Also update hexes on map move
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const onMove = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!map.isStyleLoaded()) return;
+        const source = map.getSource(HEX_SOURCE) as maplibregl.GeoJSONSource | undefined;
+        if (!source) return;
+        const zoom = map.getZoom();
+        if (zoom < MIN_HEX_ZOOM) {
+          source.setData({ type: 'FeatureCollection', features: [] });
+          return;
+        }
+        try {
+          const b = map.getBounds();
+          const visibleHexes = getVisibleHexes({
+            north: b.getNorth(), south: b.getSouth(),
+            east: b.getEast(), west: b.getWest(),
+          });
+          const geojson = buildHexGeoJSON(visibleHexes, ownedHexes, userColor);
+          source.setData(geojson);
+        } catch { /* ignore */ }
+      }, 150);
+    };
+
+    map.on('moveend', onMove);
+    return () => { map.off('moveend', onMove); clearTimeout(timer); };
+  }, [ownedHexes, userColor]);
 
   return (
     <div

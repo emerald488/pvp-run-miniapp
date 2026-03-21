@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { GameMap } from './components/Map';
 import { RunPanel } from './components/RunPanel';
 import { Profile } from './components/Profile';
@@ -6,6 +6,7 @@ import { useLocation } from './hooks/useLocation';
 import { useTelegram } from './hooks/useTelegram';
 import { useAuth } from './contexts/AuthContext';
 import { useRun } from './hooks/useRun';
+import { trackToHexes, polygonToHexes } from './lib/hexGrid';
 
 function App() {
   const { isReady } = useTelegram();
@@ -20,6 +21,28 @@ function App() {
       run.addPoint(location.coordinates);
     }
   }, [location.coordinates]);
+
+  // Calculate owned hexes from track + territory
+  const ownedHexes = useMemo(() => {
+    const hexSet = new Set<string>();
+
+    // Hexes along the track
+    if (run.points.length > 0) {
+      const trackCoords = run.points.map((p) => p.coordinates);
+      for (const hex of trackToHexes(trackCoords)) {
+        hexSet.add(hex);
+      }
+    }
+
+    // Hexes inside closed territory
+    if (run.territory) {
+      for (const hex of polygonToHexes(run.territory)) {
+        hexSet.add(hex);
+      }
+    }
+
+    return hexSet;
+  }, [run.points, run.territory]);
 
   if (authError) {
     return (
@@ -61,7 +84,7 @@ function App() {
       <GameMap
         coordinates={location.coordinates}
         trackPoints={trackCoords}
-        territory={run.territory}
+        ownedHexes={ownedHexes}
       />
       <button className="profile-btn" onClick={() => setShowProfile(true)}>
         {user?.first_name?.[0] || '?'}
