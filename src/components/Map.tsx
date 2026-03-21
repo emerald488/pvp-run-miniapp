@@ -4,7 +4,7 @@ import type { UserCoordinates } from '../types/location';
 import { getVisibleHexes, buildHexGeoJSON, type ZoneOwner } from '../lib/hexGrid';
 
 const HEX_SOURCE = 'hex-grid';
-const MIN_HEX_ZOOM = 13;
+const GRID_ZOOM = 14;  // Show full grid at this zoom and above
 
 export interface OtherPlayer {
   userId: string;
@@ -143,23 +143,28 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
     const source = map.getSource(HEX_SOURCE) as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
 
-    const zoom = map.getZoom();
-    if (zoom < MIN_HEX_ZOOM) {
-      source.setData({ type: 'FeatureCollection', features: [] });
-      return;
-    }
-
     try {
+      const zoom = map.getZoom();
       const b = map.getBounds();
-      const visibleHexes = getVisibleHexes({
-        north: b.getNorth(),
-        south: b.getSouth(),
-        east: b.getEast(),
-        west: b.getWest(),
-      });
 
-      const geojson = buildHexGeoJSON(visibleHexes, serverZones, ownedHexes, userColor);
-      source.setData(geojson);
+      if (zoom >= GRID_ZOOM) {
+        // High zoom: show full grid + owned hexes
+        const visibleHexes = getVisibleHexes({
+          north: b.getNorth(), south: b.getSouth(),
+          east: b.getEast(), west: b.getWest(),
+        });
+        const geojson = buildHexGeoJSON(visibleHexes, serverZones, ownedHexes, userColor);
+        source.setData(geojson);
+      } else {
+        // Low zoom: show only owned/captured hexes (no empty grid)
+        const allOwned = new Set([...ownedHexes, ...serverZones.keys()]);
+        if (allOwned.size > 0) {
+          const geojson = buildHexGeoJSON(Array.from(allOwned), serverZones, ownedHexes, userColor);
+          source.setData(geojson);
+        } else {
+          source.setData({ type: 'FeatureCollection', features: [] });
+        }
+      }
     } catch {
       // ignore
     }
@@ -177,19 +182,25 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
         if (!map.isStyleLoaded()) return;
         const source = map.getSource(HEX_SOURCE) as maplibregl.GeoJSONSource | undefined;
         if (!source) return;
-        const zoom = map.getZoom();
-        if (zoom < MIN_HEX_ZOOM) {
-          source.setData({ type: 'FeatureCollection', features: [] });
-          return;
-        }
         try {
+          const zoom = map.getZoom();
           const b = map.getBounds();
-          const visibleHexes = getVisibleHexes({
-            north: b.getNorth(), south: b.getSouth(),
-            east: b.getEast(), west: b.getWest(),
-          });
-          const geojson = buildHexGeoJSON(visibleHexes, serverZones, ownedHexes, userColor);
-          source.setData(geojson);
+          if (zoom >= GRID_ZOOM) {
+            const visibleHexes = getVisibleHexes({
+              north: b.getNorth(), south: b.getSouth(),
+              east: b.getEast(), west: b.getWest(),
+            });
+            const geojson = buildHexGeoJSON(visibleHexes, serverZones, ownedHexes, userColor);
+            source.setData(geojson);
+          } else {
+            const allOwned = new Set([...ownedHexes, ...serverZones.keys()]);
+            if (allOwned.size > 0) {
+              const geojson = buildHexGeoJSON(Array.from(allOwned), serverZones, ownedHexes, userColor);
+              source.setData(geojson);
+            } else {
+              source.setData({ type: 'FeatureCollection', features: [] });
+            }
+          }
         } catch { /* ignore */ }
       }, 150);
     };
