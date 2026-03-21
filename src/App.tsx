@@ -45,7 +45,7 @@ function App() {
   useEffect(() => {
     loadZones();
     loadPlayers();
-    const interval = setInterval(() => { loadZones(); loadPlayers(); }, 5000);
+    const interval = setInterval(() => { loadZones(); loadPlayers(); }, 15000);
     return () => clearInterval(interval);
   }, [loadZones, loadPlayers]);
 

@@ -5,7 +5,7 @@ import { trackToHexes, polygonToHexes } from '../lib/hexGrid';
 
 const CLOSE_DISTANCE_M = 30;
 const MIN_POINTS_FOR_CLOSE = 20;
-const POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 15000;
 
 function haversine(a: UserCoordinates, b: UserCoordinates): number {
   const R = 6371000;
