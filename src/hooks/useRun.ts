@@ -25,6 +25,8 @@ export function useRun(token: string | null) {
     duration: 0,
     speed: 0,
     territory: null,
+    liveTracking: false,
+    serverPointCount: 0,
   });
 
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -66,13 +68,19 @@ export function useRun(token: string | null) {
         }
       }
 
+      // Check if server has fresh points (within last 30s)
+      const lastServerPoint = points.length > 0 ? points[points.length - 1].timestamp : 0;
+      const isLive = Date.now() - lastServerPoint < 30000;
+
       setState((prev) => ({
         ...prev,
-        points,
-        distance,
+        points: points.length > 0 ? points : prev.points,
+        distance: points.length > 0 ? distance : prev.distance,
         duration: elapsed,
-        speed,
+        speed: points.length > 0 ? speed : prev.speed,
         territory: territory || prev.territory,
+        liveTracking: isLive,
+        serverPointCount: points.length,
       }));
     } catch {
       // Poll failed, ignore
@@ -104,6 +112,8 @@ export function useRun(token: string | null) {
       duration: 0,
       speed: 0,
       territory: null,
+      liveTracking: false,
+      serverPointCount: 0,
     });
 
     // Timer for duration

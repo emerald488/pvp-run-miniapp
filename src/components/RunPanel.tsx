@@ -4,7 +4,7 @@ interface RunPanelProps {
   duration: number;
   speed: number;
   hasTerritory: boolean;
-  trackPointCount: number;
+  liveTracking: boolean;
   onStart: () => void;
   onStop: () => void;
 }
@@ -25,14 +25,14 @@ function formatSpeed(kmh: number): string {
 }
 
 export function RunPanel({
-  isRunning, distance, duration, speed, hasTerritory, trackPointCount, onStart, onStop,
+  isRunning, distance, duration, speed, hasTerritory, liveTracking, onStart, onStop,
 }: RunPanelProps) {
   return (
     <div className="run-panel">
-      {isRunning && trackPointCount > 0 && (
-        <div className="live-indicator">
+      {isRunning && (
+        <div className={`live-indicator ${liveTracking ? '' : 'inactive'}`}>
           <span className="live-dot" />
-          Live tracking
+          {liveTracking ? 'Live tracking' : 'Waiting for location...'}
         </div>
       )}
 

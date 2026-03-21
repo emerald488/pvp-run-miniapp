@@ -209,6 +209,16 @@ body,
   animation: live-blink 1.5s ease-in-out infinite;
 }
 
+.live-indicator.inactive {
+  background: rgba(255, 200, 0, 0.15);
+  border-color: rgba(255, 200, 0, 0.3);
+  color: #ffc800;
+}
+
+.live-indicator.inactive .live-dot {
+  background: #ffc800;
+}
+
 @keyframes live-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
