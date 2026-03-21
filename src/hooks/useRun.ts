@@ -1,10 +1,10 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UserCoordinates } from '../types/location';
 import type { RunState, RunPoint } from '../types/run';
-import { saveRun } from '../lib/runs';
 
-const CLOSE_DISTANCE_M = 30; // distance to start point to close the loop
-const MIN_POINTS_FOR_CLOSE = 20; // minimum points before allowing closure
+const CLOSE_DISTANCE_M = 30;
+const MIN_POINTS_FOR_CLOSE = 20;
+const POLL_INTERVAL_MS = 3000;
 
 function haversine(a: UserCoordinates, b: UserCoordinates): number {
   const R = 6371000;
@@ -27,11 +27,76 @@ export function useRun(token: string | null) {
     territory: null,
   });
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const startTimeRef = useRef(0);
 
-  const start = useCallback(() => {
-    startTimeRef.current = Date.now();
+  // Poll server for track points (from bot live location)
+  const pollTrack = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/active-run', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!data.active || !data.points) return;
+
+      const points: RunPoint[] = data.points.map((p: { latitude: number; longitude: number; timestamp: string }) => ({
+        coordinates: { latitude: p.latitude, longitude: p.longitude },
+        timestamp: new Date(p.timestamp).getTime(),
+      }));
+
+      // Calculate distance
+      let distance = 0;
+      for (let i = 1; i < points.length; i++) {
+        distance += haversine(points[i - 1].coordinates, points[i].coordinates);
+      }
+
+      const elapsed = (Date.now() - new Date(data.startedAt).getTime()) / 1000;
+      const speed = elapsed > 0 ? (distance / 1000) / (elapsed / 3600) : 0;
+
+      // Check for loop closure
+      let territory: UserCoordinates[] | null = null;
+      if (points.length >= MIN_POINTS_FOR_CLOSE) {
+        const startCoord = points[0].coordinates;
+        const lastCoord = points[points.length - 1].coordinates;
+        if (haversine(startCoord, lastCoord) < CLOSE_DISTANCE_M) {
+          territory = points.map((p) => p.coordinates);
+          territory.push(startCoord);
+        }
+      }
+
+      setState((prev) => ({
+        ...prev,
+        points,
+        distance,
+        duration: elapsed,
+        speed,
+        territory: territory || prev.territory,
+      }));
+    } catch {
+      // Poll failed, ignore
+    }
+  }, [token]);
+
+  const start = useCallback(async () => {
+    if (!token) return;
+
+    // Create active run on server
+    try {
+      const res = await fetch('/api/active-run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      startTimeRef.current = new Date(data.startedAt).getTime();
+    } catch {
+      startTimeRef.current = Date.now();
+    }
+
     setState({
       isRunning: true,
       points: [],
@@ -41,32 +106,35 @@ export function useRun(token: string | null) {
       territory: null,
     });
 
-    intervalRef.current = setInterval(() => {
+    // Timer for duration
+    timerRef.current = setInterval(() => {
       const elapsed = (Date.now() - startTimeRef.current) / 1000;
       setState((prev) => ({ ...prev, duration: elapsed }));
     }, 1000);
-  }, []);
 
-  const stop = useCallback(() => {
-    clearInterval(intervalRef.current);
-    setState((prev) => {
-      // Save run to server
-      if (token && prev.points.length > 1) {
-        const track = prev.points.map((p) => p.coordinates);
-        saveRun(token, {
-          startedAt: new Date(startTimeRef.current).toISOString(),
-          finishedAt: new Date().toISOString(),
-          distanceM: prev.distance,
-          durationS: prev.duration,
-          avgSpeedKmh: prev.speed,
-          track,
-          territory: prev.territory,
+    // Poll for track points from bot
+    pollRef.current = setInterval(pollTrack, POLL_INTERVAL_MS);
+  }, [token, pollTrack]);
+
+  const stop = useCallback(async () => {
+    clearInterval(timerRef.current);
+    clearInterval(pollRef.current);
+
+    if (token) {
+      try {
+        await fetch('/api/active-run', {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
         });
+      } catch {
+        // ignore
       }
-      return { ...prev, isRunning: false };
-    });
+    }
+
+    setState((prev) => ({ ...prev, isRunning: false }));
   }, [token]);
 
+  // Also feed GPS points locally (as backup when bot location isn't available)
   const addPoint = useCallback((coords: UserCoordinates) => {
     setState((prev) => {
       if (!prev.isRunning) return prev;
@@ -74,41 +142,34 @@ export function useRun(token: string | null) {
       const point: RunPoint = { coordinates: coords, timestamp: Date.now() };
       const newPoints = [...prev.points, point];
 
-      // Calculate distance increment
       let newDistance = prev.distance;
       if (prev.points.length > 0) {
         const last = prev.points[prev.points.length - 1].coordinates;
         newDistance += haversine(last, coords);
       }
 
-      // Calculate speed (km/h)
       const elapsed = (Date.now() - startTimeRef.current) / 1000;
       const speed = elapsed > 0 ? (newDistance / 1000) / (elapsed / 3600) : 0;
 
-      // Check if loop is closed
       let territory: UserCoordinates[] | null = prev.territory;
-      if (
-        newPoints.length >= MIN_POINTS_FOR_CLOSE &&
-        !prev.territory
-      ) {
+      if (newPoints.length >= MIN_POINTS_FOR_CLOSE && !prev.territory) {
         const startCoord = newPoints[0].coordinates;
-        const dist = haversine(startCoord, coords);
-        if (dist < CLOSE_DISTANCE_M) {
-          // Loop closed! Create territory polygon
+        if (haversine(startCoord, coords) < CLOSE_DISTANCE_M) {
           territory = newPoints.map((p) => p.coordinates);
-          territory.push(startCoord); // close polygon
+          territory.push(startCoord);
         }
       }
 
-      return {
-        ...prev,
-        points: newPoints,
-        distance: newDistance,
-        duration: elapsed,
-        speed,
-        territory,
-      };
+      return { ...prev, points: newPoints, distance: newDistance, duration: elapsed, speed, territory };
     });
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearInterval(timerRef.current);
+      clearInterval(pollRef.current);
+    };
   }, []);
 
   return { ...state, start, stop, addPoint };
