@@ -8,6 +8,7 @@ import { useTelegram } from './hooks/useTelegram';
 import { useAuth } from './contexts/AuthContext';
 import { useRun } from './hooks/useRun';
 import { trackToHexes, polygonToHexes, type ZoneOwner } from './lib/hexGrid';
+import type { OtherPlayer } from './components/Map';
 
 function App() {
   const { isReady } = useTelegram();
@@ -16,6 +17,7 @@ function App() {
   const run = useRun(token);
   const [screen, setScreen] = useState<'map' | 'profile' | 'leaderboard'>('map');
   const [serverZones, setServerZones] = useState(new globalThis.Map<string, ZoneOwner>());
+  const [otherPlayers, setOtherPlayers] = useState<OtherPlayer[]>([]);
 
   // Fetch all captured zones from server
   const loadZones = useCallback(async () => {
@@ -30,12 +32,22 @@ function App() {
     } catch { /* ignore */ }
   }, []);
 
-  // Load zones on mount and periodically
+  // Fetch active players
+  const loadPlayers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/players');
+      const data = await res.json();
+      setOtherPlayers(data.players || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Load zones + players on mount and periodically
   useEffect(() => {
     loadZones();
-    const interval = setInterval(loadZones, 5000);
+    loadPlayers();
+    const interval = setInterval(() => { loadZones(); loadPlayers(); }, 5000);
     return () => clearInterval(interval);
-  }, [loadZones]);
+  }, [loadZones, loadPlayers]);
 
   // Reload zones when run stops
   useEffect(() => {
@@ -111,6 +123,7 @@ function App() {
         trackPoints={trackCoords}
         ownedHexes={localHexes}
         serverZones={serverZones}
+        otherPlayers={otherPlayers}
       />
       <div className="top-buttons">
         <button className="top-btn" onClick={() => setScreen('leaderboard')}>🏆</button>

@@ -6,18 +6,28 @@ import { getVisibleHexes, buildHexGeoJSON, type ZoneOwner } from '../lib/hexGrid
 const HEX_SOURCE = 'hex-grid';
 const MIN_HEX_ZOOM = 13;
 
+export interface OtherPlayer {
+  userId: string;
+  name: string;
+  color: string;
+  latitude: number;
+  longitude: number;
+}
+
 interface MapProps {
   coordinates: UserCoordinates | null;
   trackPoints: UserCoordinates[];
   ownedHexes: Set<string>;
   serverZones: globalThis.Map<string, ZoneOwner>;
+  otherPlayers: OtherPlayer[];
   userColor?: string;
 }
 
-export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, userColor = '#4285f4' }: MapProps) {
+export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, otherPlayers, userColor = '#4285f4' }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const playerMarkersRef = useRef(new globalThis.Map<string, maplibregl.Marker>());
   const firstCenter = useRef(true);
 
   // Init map
@@ -187,6 +197,41 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, use
     map.on('moveend', onMove);
     return () => { map.off('moveend', onMove); clearTimeout(timer); };
   }, [ownedHexes, serverZones, userColor]);
+
+  // Update other players markers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const currentIds = new Set(otherPlayers.map((p) => p.userId));
+
+    // Remove markers for players no longer active
+    for (const [id, marker] of playerMarkersRef.current) {
+      if (!currentIds.has(id)) {
+        marker.remove();
+        playerMarkersRef.current.delete(id);
+      }
+    }
+
+    // Add/update markers
+    for (const player of otherPlayers) {
+      let marker = playerMarkersRef.current.get(player.userId);
+      if (!marker) {
+        const el = document.createElement('div');
+        el.className = 'player-marker';
+        el.style.background = player.color;
+        el.title = player.name;
+        el.innerHTML = `<span>${player.name[0]}</span>`;
+
+        marker = new maplibregl.Marker({ element: el })
+          .setLngLat([player.longitude, player.latitude])
+          .addTo(map);
+        playerMarkersRef.current.set(player.userId, marker);
+      } else {
+        marker.setLngLat([player.longitude, player.latitude]);
+      }
+    }
+  }, [otherPlayers]);
 
   return (
     <div

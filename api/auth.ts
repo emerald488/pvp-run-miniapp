@@ -64,6 +64,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Invalid user data' });
   }
 
+  // Generate a unique color based on user ID
+  const colors = ['#4285f4', '#ff4444', '#00c853', '#ff9100', '#aa00ff', '#00bcd4', '#ff6090', '#76ff03'];
+  const colorIndex = Math.abs(user.id) % colors.length;
+
+  // Check if user already exists (don't overwrite color)
+  const { data: existingUser } = await supabase
+    .from('users')
+    .select('color')
+    .eq('id', String(user.id))
+    .single();
+
   const { error } = await supabase.from('users').upsert(
     {
       id: String(user.id),
@@ -74,6 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       photo_url: user.photo_url || null,
       language_code: user.language_code || null,
       is_premium: user.is_premium || false,
+      color: existingUser?.color || colors[colorIndex],
       last_seen_at: new Date().toISOString(),
     },
     { onConflict: 'id' },
