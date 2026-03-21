@@ -8,7 +8,6 @@ import { useTelegram } from './hooks/useTelegram';
 import { useAuth } from './contexts/AuthContext';
 import { useRun } from './hooks/useRun';
 import { trackToHexes, polygonToHexes, type ZoneOwner } from './lib/hexGrid';
-import { PlayerPopup } from './components/PlayerPopup';
 import type { OtherPlayer } from './components/Map';
 
 function App() {
@@ -19,7 +18,6 @@ function App() {
   const [screen, setScreen] = useState<'map' | 'profile' | 'leaderboard'>('map');
   const [serverZones, setServerZones] = useState(new globalThis.Map<string, ZoneOwner>());
   const [otherPlayers, setOtherPlayers] = useState<OtherPlayer[]>([]);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
   // Fetch all captured zones from server
   const loadZones = useCallback(async () => {
@@ -126,11 +124,7 @@ function App() {
         ownedHexes={localHexes}
         serverZones={serverZones}
         otherPlayers={otherPlayers}
-        onHexTap={setSelectedPlayerId}
       />
-      {selectedPlayerId && (
-        <PlayerPopup playerId={selectedPlayerId} onClose={() => setSelectedPlayerId(null)} />
-      )}
       <div className="top-buttons">
         <button className="top-btn" onClick={() => setScreen('leaderboard')}>🏆</button>
         <button className="top-btn" onClick={() => setScreen('profile')}>

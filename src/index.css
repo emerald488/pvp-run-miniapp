@@ -367,6 +367,72 @@ body,
   color: #fff;
 }
 
+/* Map Popup */
+.maplibregl-popup-content {
+  background: #1e1e36 !important;
+  border-radius: 12px !important;
+  padding: 0 !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: #1e1e36 !important;
+}
+
+.maplibregl-popup-close-button {
+  color: rgba(255,255,255,0.5) !important;
+  font-size: 18px !important;
+  right: 6px !important;
+  top: 4px !important;
+}
+
+.map-popup {
+  padding: 12px;
+  text-align: center;
+  color: #fff;
+}
+
+.popup-photo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 6px;
+}
+
+.popup-photo-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin: 0 auto 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.map-popup-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.map-popup-user {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 6px;
+}
+
+.map-popup-stats {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  justify-content: center;
+  margin-top: 6px;
+}
+
 /* Player Popup */
 .player-popup-overlay {
   position: absolute;

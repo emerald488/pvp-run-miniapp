@@ -21,10 +21,9 @@ interface MapProps {
   serverZones: globalThis.Map<string, ZoneOwner>;
   otherPlayers: OtherPlayer[];
   userColor?: string;
-  onHexTap?: (ownerId: string) => void;
 }
 
-export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, otherPlayers, userColor = '#4285f4', onHexTap }: MapProps) {
+export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, otherPlayers, userColor = '#4285f4' }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -95,16 +94,45 @@ export function GameMap({ coordinates, trackPoints, ownedHexes, serverZones, oth
       });
     });
 
-    // Tap on owned hex → show player info
-    map.on('click', 'hex-fill', (e) => {
+    // Tap on owned hex → show MapLibre popup with player info
+    map.on('click', 'hex-fill', async (e) => {
       const props = e.features?.[0]?.properties;
       if (!props?.owned || !props?.h3Index) return;
 
-      // Find owner from serverZones
       const zone = serverZones.get(props.h3Index);
-      if (zone?.ownerId && onHexTap) {
-        onHexTap(zone.ownerId);
-      }
+      if (!zone?.ownerId) return;
+
+      try {
+        const res = await fetch(`/api/player-info?id=${zone.ownerId}`);
+        const player = await res.json();
+        if (!player.first_name) return;
+
+        const distStr = (player.total_distance_m || 0) < 1000
+          ? `${Math.round(player.total_distance_m || 0)} m`
+          : `${((player.total_distance_m || 0) / 1000).toFixed(1)} km`;
+
+        const photoHtml = player.photo_url
+          ? `<img src="${player.photo_url}" class="popup-photo" />`
+          : `<div class="popup-photo-placeholder" style="background:${zone.ownerColor}">${player.first_name[0]}</div>`;
+
+        const html = `
+          <div class="map-popup">
+            ${photoHtml}
+            <div class="map-popup-name">${player.first_name}</div>
+            ${player.username ? `<div class="map-popup-user">@${player.username}</div>` : ''}
+            <div class="map-popup-stats">
+              <span>🔷 ${player.total_territories} зон</span>
+              <span>🏃 ${player.total_runs} заб.</span>
+              <span>📏 ${distStr}</span>
+            </div>
+          </div>
+        `;
+
+        new maplibregl.Popup({ closeButton: true, maxWidth: '220px' })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map);
+      } catch { /* ignore */ }
     });
 
     return () => {
