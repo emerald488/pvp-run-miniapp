@@ -102,7 +102,7 @@ body,
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.2);
+  border: 3px solid var(--border);
   border-top-color: #4285f4;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -169,7 +169,7 @@ body,
 .stat-value {
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -289,9 +289,9 @@ body,
   height: 40px;
   border-radius: 50%;
   border: none;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--panel-bg);
   backdrop-filter: blur(8px);
-  color: #fff;
+  color: var(--text);
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
@@ -314,7 +314,7 @@ body,
 .profile-header h2 {
   font-size: 22px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 .profile-username {
@@ -340,7 +340,7 @@ body,
   justify-content: center;
   gap: 24px;
   padding: 16px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
 }
 
 .runs-list {
@@ -357,7 +357,7 @@ body,
 }
 
 .runs-empty {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-dim);
   text-align: center;
   padding: 32px 0;
   font-size: 14px;
@@ -392,7 +392,7 @@ body,
   gap: 16px;
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text);
 }
 
 /* Map Popup */
@@ -448,7 +448,7 @@ body,
 
 .map-popup-user {
   font-size: 11px;
-  color: rgba(255,255,255,0.4);
+  color: var(--text-dim);
   margin-bottom: 6px;
 }
 
@@ -456,7 +456,7 @@ body,
   display: flex;
   gap: 8px;
   font-size: 11px;
-  color: rgba(255,255,255,0.7);
+  color: var(--text-muted);
   justify-content: center;
   margin-top: 6px;
 }
@@ -475,7 +475,7 @@ body,
 }
 
 .player-popup {
-  background: #1e1e36;
+  background: var(--popup-bg);
   border-radius: 20px;
   padding: 20px;
   width: 100%;
@@ -504,7 +504,7 @@ body,
 .popup-name {
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 .popup-username {
@@ -526,7 +526,7 @@ body,
 .popup-stat-value {
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 .popup-stat-label {
