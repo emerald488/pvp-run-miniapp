@@ -45,6 +45,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single();
 
     if (activeRun) {
+      // Check if this is the first point
+      const { count } = await supabase
+        .from('track_points')
+        .select('id', { count: 'exact', head: true })
+        .eq('run_id', activeRun.id);
+
       // Append point to active run track
       await supabase.from('track_points').insert({
         run_id: activeRun.id,
@@ -53,6 +59,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         longitude,
         timestamp,
       });
+
+      // Send confirmation on first point
+      if (count === 0) {
+        await sendMessage(msg.from.id,
+          '📍 Геолокация подключена! Трекинг работает в фоне.\n\nМожете свернуть приложение — маршрут записывается.'
+        );
+      }
+    } else {
+      // No active run — let user know
+      await sendMessage(msg.from.id,
+        '⚠️ Нет активного забега. Сначала нажмите START в приложении.'
+      );
     }
 
     return res.status(200).json({ ok: true });

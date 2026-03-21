@@ -72,6 +72,7 @@ function App() {
         duration={run.duration}
         speed={run.speed}
         hasTerritory={!!run.territory}
+        trackPointCount={run.points.length}
         onStart={run.start}
         onStop={run.stop}
       />
