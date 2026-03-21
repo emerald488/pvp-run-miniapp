@@ -1,11 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { latLngToCell } from 'h3-js';
 
 const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const SUPABASE_URL = process.env.RunPVP_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.RunPVP_SUPABASE_SERVICE_ROLE_KEY!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const HEX_RESOLUTION = 10;
 
 async function sendMessage(chatId: number, text: string) {
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -60,10 +62,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         timestamp,
       });
 
+      // Capture hex in real-time
+      const h3Index = latLngToCell(latitude, longitude, HEX_RESOLUTION);
+
+      // Get user color
+      const { data: userData } = await supabase
+        .from('users')
+        .select('color')
+        .eq('id', userId)
+        .single();
+      const color = userData?.color || '#4285f4';
+
+      await supabase.from('zones').upsert(
+        {
+          h3_index: h3Index,
+          owner_id: userId,
+          owner_color: color,
+          captured_at: timestamp,
+        },
+        { onConflict: 'h3_index' },
+      );
+
       // Send confirmation on first point
       if (count === 0) {
         await sendMessage(msg.from.id,
-          '📍 Геолокация подключена! Трекинг работает в фоне.\n\nМожете свернуть приложение — маршрут записывается.'
+          '📍 Геолокация подключена! Трекинг и захват территории работают в фоне.'
         );
       }
     }

@@ -33,7 +33,7 @@ function App() {
   // Load zones on mount and periodically
   useEffect(() => {
     loadZones();
-    const interval = setInterval(loadZones, 15000);
+    const interval = setInterval(loadZones, 5000);
     return () => clearInterval(interval);
   }, [loadZones]);
 
