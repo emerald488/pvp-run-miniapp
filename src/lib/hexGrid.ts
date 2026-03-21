@@ -1,8 +1,8 @@
 import { polygonToCells, cellToBoundary } from 'h3-js';
 import type { HexFeatureProperties, ZoneData } from '../types/zone';
 
-const HEX_RESOLUTION = 9;
-const NEUTRAL_COLOR = 'rgba(255,255,255,0.08)';
+const HEX_RESOLUTION = 10;
+const NEUTRAL_COLOR = '#333344';
 
 export function getVisibleHexes(bounds: {
   north: number;
@@ -10,6 +10,7 @@ export function getVisibleHexes(bounds: {
   east: number;
   west: number;
 }): string[] {
+  // H3 default format: [lat, lng]
   const polygon: [number, number][] = [
     [bounds.north, bounds.west],
     [bounds.north, bounds.east],
@@ -18,7 +19,7 @@ export function getVisibleHexes(bounds: {
     [bounds.north, bounds.west],
   ];
 
-  return polygonToCells(polygon, HEX_RESOLUTION, true);
+  return polygonToCells(polygon, HEX_RESOLUTION);
 }
 
 export function buildHexGeoJSON(
@@ -34,13 +35,15 @@ export function buildHexGeoJSON(
     coords.push(coords[0]);
 
     const zone = ownership.get(h3Index);
+    const owned = !!zone?.ownerId;
 
     features.push({
       type: 'Feature',
       properties: {
         h3Index,
-        ownerId: zone?.ownerId ?? null,
+        ownerId: zone?.ownerId ?? '',
         ownerColor: zone?.ownerColor ?? NEUTRAL_COLOR,
+        owned,
       },
       geometry: {
         type: 'Polygon',

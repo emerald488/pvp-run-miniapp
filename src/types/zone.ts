@@ -7,6 +7,7 @@ export interface ZoneData {
 
 export interface HexFeatureProperties {
   h3Index: string;
-  ownerId: string | null;
+  ownerId: string;
   ownerColor: string;
+  owned: boolean;
 }
