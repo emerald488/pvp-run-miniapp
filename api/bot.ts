@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { latLngToCell } from 'h3-js';
+import { shouldNotify } from './notifications';
 
 const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const SUPABASE_URL = process.env.RunPVP_SUPABASE_URL!;
@@ -94,21 +95,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             { onConflict: 'h3_index' },
           );
 
-          // Notify
+          // Notify (respects user notification preferences)
           const attackerName = userData?.first_name || 'Игрок';
-          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: prevOwnerId,
-              text: `⚔️ Ваша территория захвачена игроком ${attackerName}!`,
-              reply_markup: {
-                inline_keyboard: [[
-                  { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
-                ]],
-              },
-            }),
-          }).catch(() => {});
+          const canNotify = await shouldNotify(prevOwnerId, 'zone_attacks');
+          if (canNotify) {
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: prevOwnerId,
+                text: `⚔️ Ваша территория захвачена игроком ${attackerName}!`,
+                reply_markup: {
+                  inline_keyboard: [[
+                    { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
+                  ]],
+                },
+              }),
+            }).catch(() => {});
+          }
         }
       } else if (!prevOwnerId || prevOwnerId === userId) {
         // Unclaimed or own zone — always capture

@@ -42,3 +42,12 @@ export async function fetchRuns(token: string): Promise<SavedRun[]> {
   const { runs } = await res.json();
   return runs;
 }
+
+export async function fetchRunById(token: string, runId: string): Promise<SavedRun | null> {
+  const res = await fetch(`/api/run-detail?id=${encodeURIComponent(runId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const { run } = await res.json();
+  return run;
+}

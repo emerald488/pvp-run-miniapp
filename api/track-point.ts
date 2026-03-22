@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 import { latLngToCell } from 'h3-js';
+import { shouldNotify } from './notifications';
 
 const SUPABASE_URL = process.env.RunPVP_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.RunPVP_SUPABASE_SERVICE_ROLE_KEY!;
@@ -80,22 +81,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { onConflict: 'h3_index' },
     );
 
-    // Notify previous owner if stolen
+    // Notify previous owner if stolen (respects notification preferences)
     if (prevZone?.owner_id && prevZone.owner_id !== userId) {
-      const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
-      fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: prevZone.owner_id,
-          text: `⚔️ Ваша территория захвачена игроком ${userData?.first_name || 'Игрок'}!`,
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
-            ]],
-          },
-        }),
-      }).catch(() => {});
+      const canNotify = await shouldNotify(prevZone.owner_id, 'zone_attacks');
+      if (canNotify) {
+        const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+        fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: prevZone.owner_id,
+            text: `⚔️ Ваша территория захвачена игроком ${userData?.first_name || 'Игрок'}!`,
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '📍 Открыть карту', web_app: { url: 'https://pvp-run-miniapp.vercel.app' } }
+              ]],
+            },
+          }),
+        }).catch(() => {});
+      }
     }
   }
 
